@@ -6,6 +6,7 @@
 #include "core/utils.h"
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
+#include "esp_netif.h"
 #include "esp_wifi.h"
 #include "wifi_atks.h"
 
@@ -159,6 +160,21 @@ bool EvilPortal::connectUpstreamSta() {
         WiFi.localIP().toString().c_str(), staChan, _channel
     );
     _channel = staChan;
+
+    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta_netif == nullptr) {
+        Serial.println("[PORTAL] WIFI_STA_DEF netif not found; NAPT skipped");
+    } else {
+        esp_err_t napt_err = esp_netif_napt_enable(sta_netif);
+        if (napt_err == ESP_OK) {
+            Serial.println("[PORTAL] NAPT enabled on STA netif");
+        } else {
+            Serial.printf(
+                "[PORTAL] esp_netif_napt_enable err=%d; bridge will not forward traffic\n",
+                napt_err
+            );
+        }
+    }
     return true;
 }
 
@@ -373,19 +389,27 @@ void EvilPortal::loop() {
             if (exitPortal) {
                 displayTextLine("Shutting down...");
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
+                if (_bridgeMode) {
+                    esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+                    if (sta_netif != nullptr) {
+                        esp_netif_napt_disable(sta_netif);
+                        Serial.println("[PORTAL] NAPT disabled on STA netif");
+                    }
+                }
+
                 webServer.end();
                 vTaskDelay(200 / portTICK_PERIOD_MS);
-                
+
                 dnsServer.stop();
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
                 WiFi.mode(_originalWifiMode);
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
                 wifiDisconnect();
                 vTaskDelay(100 / portTICK_PERIOD_MS);
-                
+
                 return;
             }
             shouldRedraw = true;
