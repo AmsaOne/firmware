@@ -58,6 +58,8 @@ private:
     bool _autoMode;
     bool _backgroundMode;
     bool _bridgeMode;
+    String _upstreamSsid;
+    String _upstreamPwd;
     
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
@@ -93,6 +95,8 @@ private:
     void credsController(AsyncWebServerRequest *request);
 
     bool verifyCreds(String &Ssid, String &Password);
+    bool selectUpstreamCreds();
+    bool connectUpstreamSta();
     void restartWiFi(bool reset = true);
     void resetCapturedCredentials(void);
     void printDeauthStatus(void);

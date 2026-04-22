@@ -106,7 +106,59 @@ bool EvilPortal::setup() {
 
     loopOptions(options);
 
+    if (_bridgeMode) {
+        if (!selectUpstreamCreds()) {
+            Serial.println("[PORTAL] bridge_mode: no upstream selected, falling back to AP-only");
+            _bridgeMode = false;
+        }
+    }
+
     Serial.println("Evil Portal output file: " + outputFile);
+    return true;
+}
+
+bool EvilPortal::selectUpstreamCreds() {
+    if (bruceConfig.wifi.empty()) {
+        Serial.println("[PORTAL] bridge_mode: no saved networks in BruceConfig::wifi");
+        displayTextLine("No saved WiFi");
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+        return false;
+    }
+
+    _upstreamSsid = "";
+    options.clear();
+    for (const auto &pair : bruceConfig.wifi) {
+        String ssid = pair.first;
+        options.emplace_back(ssid.c_str(), [this, ssid]() { this->_upstreamSsid = ssid; });
+    }
+    loopOptions(options);
+    if (returnToMenu || _upstreamSsid.isEmpty()) return false;
+
+    _upstreamPwd = bruceConfig.getWifiPassword(_upstreamSsid);
+    Serial.printf("[PORTAL] bridge_mode upstream: %s\n", _upstreamSsid.c_str());
+    return true;
+}
+
+bool EvilPortal::connectUpstreamSta() {
+    Serial.printf("[PORTAL] STA -> '%s' ...\n", _upstreamSsid.c_str());
+    WiFi.begin(_upstreamSsid.c_str(), _upstreamPwd.c_str());
+
+    const uint32_t deadline = millis() + 10000;
+    while (WiFi.status() != WL_CONNECTED && millis() < deadline) {
+        vTaskDelay(250 / portTICK_PERIOD_MS);
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[PORTAL] STA connect failed, disabling bridge for this session");
+        return false;
+    }
+
+    uint8_t staChan = WiFi.channel();
+    Serial.printf(
+        "[PORTAL] STA up: ip=%s ch=%u (was ap_ch=%u) -> locking AP to STA channel\n",
+        WiFi.localIP().toString().c_str(), staChan, _channel
+    );
+    _channel = staChan;
     return true;
 }
 
@@ -115,8 +167,13 @@ void EvilPortal::beginAP() {
         drawMainBorderWithTitle("EVIL PORTAL");
         displayTextLine("Starting...");
     }
-    if (_verifyPwd) WiFi.mode(WIFI_MODE_APSTA);
+    if (_verifyPwd || _bridgeMode) WiFi.mode(WIFI_MODE_APSTA);
     else WiFi.mode(WIFI_MODE_AP);
+
+    if (_bridgeMode && !connectUpstreamSta()) {
+        _bridgeMode = false;
+        if (!_verifyPwd) WiFi.mode(WIFI_MODE_AP);
+    }
 
     if (!WiFi.softAPConfig(apGateway, apGateway, IPAddress(255, 255, 255, 0))) {
         Serial.println("[PORTAL] softAPConfig failed");
