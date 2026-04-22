@@ -5,6 +5,7 @@
 #include <ESPAsyncWebServer.h>
 #include <globals.h>
 #include <WiFiType.h>
+#include <set>
 
 class EvilPortal {
     class CaptiveRequestHandler : public AsyncWebHandler {
@@ -58,8 +59,10 @@ private:
     bool _autoMode;
     bool _backgroundMode;
     bool _bridgeMode;
+    bool _dnsHijackActive = true;
     String _upstreamSsid;
     String _upstreamPwd;
+    std::set<uint32_t> _authedIps;
     
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
