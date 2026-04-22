@@ -599,6 +599,25 @@ void setEvilPasswordMode() {
 }
 
 /*********************************************************************
+** Function: setEvilBridgeMode
+** Toggles EvilPortal bridge mode. When on, the portal sits in
+** AP+STA mode, the STA connects to an upstream SSID picked from the
+** saved-networks map, and NAPT forwards victim traffic upstream so the
+** victim sees a working internet link after submitting creds.
+***********************************************************************/
+void setEvilBridgeMode() {
+    options = {
+        {"Off",
+         [=]() { bruceConfig.setEvilPortalBridgeMode(false); },
+         bruceConfig.evilPortalBridgeMode == false},
+        {"On",
+         [=]() { bruceConfig.setEvilPortalBridgeMode(true); },
+         bruceConfig.evilPortalBridgeMode == true },
+    };
+    loopOptions(options, bruceConfig.evilPortalBridgeMode ? 1 : 0);
+}
+
+/*********************************************************************
 **  Function: setRFModuleMenu
 **  Handles Menu to set the RF module in use
 **********************************************************************/

@@ -112,6 +112,7 @@ void WifiMenu::configMenu() {
                                std::vector<Option> evilOptions;
 
                                evilOptions.push_back({"Password Mode", setEvilPasswordMode});
+                               evilOptions.push_back({"Bridge Mode", setEvilBridgeMode});
                                evilOptions.push_back({"Rename /creds", setEvilEndpointCreds});
                                evilOptions.push_back({"Allow /creds access", setEvilAllowGetCreds});
                                evilOptions.push_back({"Rename /ssid", setEvilEndpointSsid});

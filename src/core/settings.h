@@ -48,6 +48,8 @@ void setEvilAllowSetSsid();
 
 void setEvilPasswordMode();
 
+void setEvilBridgeMode();
+
 void setRFModuleMenu();
 
 void setRFFreqMenu();
