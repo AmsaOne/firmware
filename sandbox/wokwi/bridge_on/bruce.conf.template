@@ -1,0 +1,14 @@
+{
+  "evilPortalBridgeMode": true,
+  "wifi": {
+    "Wokwi-GUEST": ""
+  },
+  "evilWifiPasswordMode": 0,
+  "evilWifiEndpoints": {
+    "getCredsEndpoint": "/creds",
+    "setSsidEndpoint": "/ssid",
+    "showEndpoints": true,
+    "allowSetSsid": true,
+    "allowGetCreds": true
+  }
+}

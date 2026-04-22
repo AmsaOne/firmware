@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = 'Bruce-esp32-s3-devkitc-1.bin'
+elf = 'Bruce-esp32-s3-devkitc-1.elf'

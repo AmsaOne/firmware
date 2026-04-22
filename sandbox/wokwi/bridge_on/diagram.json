@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "author": "AmsaOne",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-s3-devkitc-1", "id": "esp", "top": 0, "left": 0, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ]
+  ],
+  "dependencies": {
+    "_notes": "Simulator spawns an open Wokwi-GUEST AP the ESP STA-associates to in bridge_on mode."
+  }
+}
