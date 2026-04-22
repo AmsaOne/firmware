@@ -7,6 +7,8 @@
 #include <WiFiType.h>
 #include <set>
 
+#include "bridge_dns_proxy.h"
+
 class EvilPortal {
     class CaptiveRequestHandler : public AsyncWebHandler {
     public:
@@ -59,10 +61,10 @@ private:
     bool _autoMode;
     bool _backgroundMode;
     bool _bridgeMode;
-    bool _dnsHijackActive = true;
     String _upstreamSsid;
     String _upstreamPwd;
     std::set<uint32_t> _authedIps;
+    BridgeDnsProxy _dnsProxy{_authedIps};
     
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;

