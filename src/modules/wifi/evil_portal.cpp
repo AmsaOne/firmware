@@ -13,10 +13,12 @@ EvilPortal::EvilPortal(
     String tssid, uint8_t channel, bool deauth, bool verifyPwd, bool autoMode, bool backgroundMode
 )
     : apName(tssid), _channel(channel), _deauth(deauth), _verifyPwd(verifyPwd), _autoMode(autoMode),
-      _backgroundMode(backgroundMode), webServer(80), _launchTime(millis()) {
-    
+      _backgroundMode(backgroundMode), _bridgeMode(bruceConfig.evilPortalBridgeMode),
+      webServer(80), _launchTime(millis()) {
+
     _originalWifiMode = WiFi.getMode();
     _wifiWasConnected = (WiFi.status() == WL_CONNECTED);
+    Serial.printf("[PORTAL] bridge_mode=%s\n", _bridgeMode ? "on" : "off");
     
     if (!setup()) return;
     cleanlyStopWebUiForWiFiFeature();

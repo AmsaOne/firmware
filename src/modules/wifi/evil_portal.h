@@ -57,6 +57,7 @@ private:
     bool _verifyPwd;
     bool _autoMode;
     bool _backgroundMode;
+    bool _bridgeMode;
     
     wifi_mode_t _originalWifiMode;
     bool _wifiWasConnected;
