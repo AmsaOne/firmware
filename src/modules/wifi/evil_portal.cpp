@@ -171,6 +171,12 @@ bool EvilPortal::connectUpstreamSta() {
     if (sta_netif == nullptr) {
         Serial.println("[PORTAL] WIFI_STA_DEF netif not found; NAPT skipped");
     } else {
+        esp_netif_t *prev_default = esp_netif_get_default_netif();
+        esp_err_t route_err = esp_netif_set_default_netif(sta_netif);
+        Serial.printf(
+            "[PORTAL] default_netif -> STA (prev=%p, err=%d)\n",
+            prev_default, route_err
+        );
         esp_err_t napt_err = esp_netif_napt_enable(sta_netif);
         if (napt_err == ESP_OK) {
             Serial.println("[PORTAL] NAPT enabled on STA netif");
@@ -406,6 +412,11 @@ void EvilPortal::loop() {
                     if (sta_netif != nullptr) {
                         esp_netif_napt_disable(sta_netif);
                         Serial.println("[PORTAL] NAPT disabled on STA netif");
+                    }
+                    esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+                    if (ap_netif != nullptr) {
+                        esp_netif_set_default_netif(ap_netif);
+                        Serial.println("[PORTAL] default_netif restored to AP");
                     }
                     TrafficTapRegistry::unregister_tap(&g_bridge_tap);
                 }
