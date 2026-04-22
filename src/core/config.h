@@ -69,6 +69,7 @@ public:
     // EvilPortal
     EvilPortalEndpoints evilPortalEndpoints = {"/creds", "/ssid", true, true, true};
     EvilPortalPasswordMode evilPortalPasswordMode = FULL_PASSWORD;
+    bool evilPortalBridgeMode = false;
 
     void setWifiMAC(const String &mac) {
         wifiMAC = mac;
@@ -163,6 +164,7 @@ public:
     void setEvilAllowGetCreds(bool value);
     void setEvilAllowSetSsid(bool value);
     void setEvilPasswordMode(EvilPortalPasswordMode value);
+    void setEvilPortalBridgeMode(bool value);
     void validateEvilEndpointCreds();
     void validateEvilEndpointSsid();
     void validateEvilPasswordMode();

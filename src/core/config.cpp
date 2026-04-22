@@ -55,6 +55,7 @@ JsonDocument BruceConfig::toJson() const {
     _evilWifiEndpoints["allowGetCreds"] = evilPortalEndpoints.allowGetCreds;
 
     setting["evilWifiPasswordMode"] = evilPortalPasswordMode;
+    setting["evilPortalBridgeMode"] = evilPortalBridgeMode;
 
     JsonObject _wifi = setting["wifi"].to<JsonObject>();
     for (const auto &pair : wifi) { _wifi[pair.first] = pair.second; }
@@ -329,6 +330,13 @@ void BruceConfig::fromFile(bool checkFS) {
             evilPortalPasswordMode = FULL_PASSWORD;
             log_w("Invalid evilWifiPasswordMode, using FULL_PASSWORD");
         }
+    } else {
+        count++;
+        log_e("Fail");
+    }
+
+    if (!setting["evilPortalBridgeMode"].isNull()) {
+        evilPortalBridgeMode = setting["evilPortalBridgeMode"].as<bool>();
     } else {
         count++;
         log_e("Fail");
@@ -706,6 +714,11 @@ void BruceConfig::setEvilPasswordMode(EvilPortalPasswordMode value) {
 
 void BruceConfig::validateEvilPasswordMode() {
     if (evilPortalPasswordMode < 0 || evilPortalPasswordMode > 2) evilPortalPasswordMode = FULL_PASSWORD;
+}
+
+void BruceConfig::setEvilPortalBridgeMode(bool value) {
+    evilPortalBridgeMode = value;
+    saveFile();
 }
 
 void BruceConfig::setStartupApp(String value) {
