@@ -4,6 +4,17 @@
 
 #ifdef HAS_RGB_LED
 #include <Arduino.h>
+
+// TFT_eSPI's ST7735_Defines.h pollutes the global namespace with color macros
+// (RED, BLACK, etc.) that collide with FastLED's fl/rbtree.h enum members.
+// Undef them before pulling FastLED so its red-black tree compiles.
+#ifdef RED
+#undef RED
+#endif
+#ifdef BLACK
+#undef BLACK
+#endif
+
 #include <FastLED.h>
 
 #define LED_EFFECT_SOLID 0

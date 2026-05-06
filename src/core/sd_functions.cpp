@@ -53,6 +53,7 @@ bool setupSdCard() {
         if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs)) result = false;
         // Serial.println("Task not activated");
     }
+#ifndef BRUCE_SD_FORCE_DEDICATED_SPI
     // SDCard in the same Bus as TFT, in this case we call the SPI TFT Instance
     else if (bruceConfigPins.SDCARD_bus.mosi == (gpio_num_t)TFT_MOSI &&
              bruceConfigPins.SDCARD_bus.mosi != GPIO_NUM_NC) {
@@ -67,9 +68,21 @@ bool setupSdCard() {
 #endif
 
     }
+#endif
     // If not using TFT Bus, use a specific bus
     else {
     NEXT:
+#ifdef BRUCE_SD_FORCE_DEDICATED_SPI
+        // T-Dongle C5: match LilyGo's working SD_Test.ino exactly — global SPI
+        // pre-initialized in interface.cpp::_setup_gpio() with the 4-arg
+        // SPI.begin(sck,miso,mosi,ss), then plain SD.begin(cs) using the SD
+        // library's default 4 MHz clock and default global SPI instance.
+        delay(10);
+        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs)) {
+            result = false;
+        }
+        Serial.println("SDCard using global SPI (matching LilyGo SD_Test.ino)");
+#else
         sdcardSPI.begin(
             (int8_t)bruceConfigPins.SDCARD_bus.sck,
             (int8_t)bruceConfigPins.SDCARD_bus.miso,
@@ -86,6 +99,7 @@ bool setupSdCard() {
 #endif
         }
         Serial.println("SDCard in a different Bus, using sdcardSPI instance");
+#endif
     }
 #endif
 

@@ -23,7 +23,14 @@ StartupApp startupApp;
 String startupAppJSInterpreterFile = "";
 
 MainMenu mainMenu;
+#ifdef LILYGO_T_DONGLE_C5
+// ESP32-C5 has only one GPSPI peripheral (FSPI). The default SPIClass
+// constructor picks bus index 1 (HSPI) which doesn't exist on this chip
+// and fails with "SPI bus index 1 is out of range". Bind explicitly to FSPI.
+SPIClass sdcardSPI(FSPI);
+#else
 SPIClass sdcardSPI;
+#endif
 #ifdef USE_HSPI_PORT
 #ifndef VSPI
 #define VSPI FSPI
@@ -433,7 +440,7 @@ void setup() {
     bruceConfig.bright = 100; // theres is no value yet
     bruceConfigPins.rotation = ROTATION;
     setup_gpio();
-#if defined(HAS_SCREEN)
+#if defined(HAS_SCREEN) && !defined(BRUCE_SKIP_TFT_INIT)
     tft.init();
     tft.setRotation(bruceConfigPins.rotation);
     tft.fillScreen(TFT_BLACK);
