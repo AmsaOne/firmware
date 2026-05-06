@@ -351,8 +351,10 @@ static bool wd_mount_sd_idf() {
     Serial.println("[wd][sd] step 3: settling delay 30ms");
     delay(30);
 
+#ifdef WD_DEBUG_SD_BOOT
     Serial.println("[wd][sd] GPIO config BEFORE spi_bus_initialize:");
     gpio_dump_io_configuration(stdout, WD_GPIO_DUMP_MASK);
+#endif
 
     // Step 4: configure the SPI bus. CRITICAL — use SDCARD_* (not TFT_*) macros
     // because the LCD is write-only and TFT_MISO is build-flagged to -1
@@ -381,8 +383,10 @@ static bool wd_mount_sd_idf() {
     Serial.println("[wd][sd] step 5: post-init settling delay 50ms");
     delay(50);
 
+#ifdef WD_DEBUG_SD_BOOT
     Serial.println("[wd][sd] GPIO config AFTER spi_bus_initialize, BEFORE mount:");
     gpio_dump_io_configuration(stdout, WD_GPIO_DUMP_MASK);
+#endif
 
     // Step 6: configure slot + host + mount options.
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
@@ -403,8 +407,10 @@ static bool wd_mount_sd_idf() {
     ret = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_config, &mount_config, &wd_sd_card);
     Serial.printf("[wd][sd]   esp_vfs_fat_sdspi_mount => 0x%x (%s)\n", ret, esp_err_to_name(ret));
 
+#ifdef WD_DEBUG_SD_BOOT
     Serial.println("[wd][sd] GPIO config AFTER mount attempt:");
     gpio_dump_io_configuration(stdout, WD_GPIO_DUMP_MASK);
+#endif
 
     if (ret != ESP_OK) {
         Serial.println("[wd][sd] FAILED: SD did not mount.");
