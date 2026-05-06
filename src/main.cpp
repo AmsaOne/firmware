@@ -188,6 +188,10 @@ void _setup_gpio() {}
 void _post_setup_gpio() __attribute__((weak));
 void _post_setup_gpio() {}
 
+#if defined(LILYGO_T_DONGLE_C5)
+extern "C" void wd_post_loop_init();
+#endif
+
 /*********************************************************************
  **  Function: setup_gpio
  **  Setup GPIO pins
@@ -519,6 +523,24 @@ void setup() {
  **********************************************************************/
 #if defined(HAS_SCREEN)
 void loop() {
+#if defined(LILYGO_T_DONGLE_C5)
+    // Headless wardriver build — Bruce's main menu and tft.* drawing aren't
+    // wanted here, AND the LCD on this board is bit-banged. Arduino SPIClass
+    // tft.* calls clobber the SPI2 peripheral our IDF sdspi driver needs;
+    // separate locks → CRC errors / spi_hal_iram.c asserts when the scanner
+    // task and main task both touch SPI2.
+    //
+    // Deferred init: mount SD + start headless tasks on the first loop()
+    // iteration, AFTER setup() has fully returned (which is what guarantees
+    // no further main-task tft.* traffic). Subsequent iterations just idle.
+    static bool wd_loop_inited = false;
+    if (!wd_loop_inited) {
+        wd_loop_inited = true;
+        wd_post_loop_init();
+    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    return;
+#endif
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     if (interpreter_state > 0) {
         vTaskDelay(pdMS_TO_TICKS(10));

@@ -195,6 +195,20 @@ static void lcd_text_shadow(uint8_t x, uint8_t y, const char* s,
 // `wd_restore_fspi_routing()` wires the GPIO matrix back to FSPI's signals
 // (FSPID/FSPIQ/FSPICLK) so sdmmc reads work again. Forward decl needed because
 // led_set_rgb() calls it but `wd_sd_mounted` is defined further down.
+//
+// CRITICAL: bit-bang must hold the same mutex as IDF sdspi transactions,
+// because any concurrent SD I/O (initiated by the AsyncWebServer task while
+// the scanner task is in led_set_rgb, or vice versa) would crash with
+// "spi_ll_get_running_cmd(hw) == 0" assert in spi_hal_iram.c — the bit-bang
+// hijacks GPIO 2/6 mid-transaction, freezing the peripheral with the
+// command-running bit still set.
+//
+// Recursive mutex defined here (early) instead of further down because
+// led_set_rgb needs it; the WD_SD_LOCK / WD_SD_UNLOCK macros wrap every
+// SD operation later in the file.
+static SemaphoreHandle_t wd_sd_mtx = nullptr;
+#define WD_SD_LOCK()   if (wd_sd_mtx) xSemaphoreTakeRecursive(wd_sd_mtx, portMAX_DELAY)
+#define WD_SD_UNLOCK() if (wd_sd_mtx) xSemaphoreGiveRecursive(wd_sd_mtx)
 static bool wd_sd_mounted_fwd();
 static void wd_restore_fspi_routing();
 
@@ -204,9 +218,11 @@ static void wd_restore_fspi_routing();
 //
 // Borrows the shared SPI bus from the FSPI peripheral, sends the frame, then
 // returns the bus to FSPI control so the SD card stays usable. Called from
-// the wardriver scanner task on every iteration, so the borrow/return cycle
-// must stay self-contained.
+// the wardriver scanner task on every iteration AND from REST handlers, so
+// the bit-bang must hold wd_sd_mtx — otherwise a concurrent IDF sdspi
+// transaction will collide and trip the spi_hal_iram.c:134 assert.
 static void led_set_rgb(uint8_t r, uint8_t g, uint8_t b, uint8_t bright = 8) {
+    WD_SD_LOCK();
     pinMode(SDCARD_MOSI, OUTPUT); digitalWrite(SDCARD_MOSI, LOW);
     pinMode(SDCARD_SCK,  OUTPUT); digitalWrite(SDCARD_SCK,  LOW);
     bb_spi_byte(0); bb_spi_byte(0); bb_spi_byte(0); bb_spi_byte(0);     // start
@@ -214,6 +230,7 @@ static void led_set_rgb(uint8_t r, uint8_t g, uint8_t b, uint8_t bright = 8) {
     bb_spi_byte(b); bb_spi_byte(g); bb_spi_byte(r);
     bb_spi_byte(0xFF); bb_spi_byte(0xFF); bb_spi_byte(0xFF); bb_spi_byte(0xFF);  // end
     if (wd_sd_mounted_fwd()) wd_restore_fspi_routing();
+    WD_SD_UNLOCK();
 }
 
 // ---- Boot splash -----------------------------------------------------------
@@ -425,6 +442,7 @@ void _setup_gpio() {
 }
 
 extern "C" void wd_boot_headless_runtime();
+extern "C" void wd_post_loop_init();
 
 void _post_setup_gpio() {
     // Apply Bruce config defaults that were deferred from _setup_gpio
@@ -433,34 +451,32 @@ void _post_setup_gpio() {
     bruceConfig.colorInverted = 1;
     bruceConfigPins.rotation  = ROTATION;
 
-    // Mount the SD card via ESP-IDF sdspi NOW — after Bruce's tft.init()
-    // (main.cpp:444) has run and finished poking the SPI2 peripheral via
-    // its private SPIClass instance. wd_mount_sd_idf's preamble (SPI.end +
-    // spi_bus_free + delay + spi_bus_initialize) cleans up after TFT_eSPI's
-    // clobbering and gives sdspi_host a fresh peripheral to drive. Bruce's
-    // earlier setupSdCard() (in begin_storage() at main.cpp:453) failed
-    // because Arduino SD.h doesn't work here, but bruceConfig falls back to
-    // LittleFS so that's harmless noise.
-    wd_mount_sd_idf();
-
-    // Reclaim the SPI bus from TFT_eSPI's peripheral binding, then bit-bang
-    // our own ST7735 init + splash. From here on, Bruce's later TFT_eSPI
-    // writes won't visibly do anything (HW SPI on GPIO 2 doesn't reach the
-    // panel), so the splash is the last thing painted to the panel and
-    // stays up for the lifetime of the wardriver session.
+    // Bit-bang LCD splash + APA102 cyan LED so the user sees boot
+    // feedback. No SD mount and no task spawn here — Bruce's setup()
+    // continues with more tft.*  calls after _post_setup_gpio returns
+    // (boot_screen_anim, wakeUpScreen, etc), and any IDF SD transaction
+    // running concurrently would race against TFT_eSPI's Arduino SPIClass
+    // transactions on the same SPI2 peripheral (separate locks → CRC
+    // errors / spi_hal_iram.c assert). The deferred init pattern below
+    // moves SD mount + task start to the first loop() iteration, after
+    // setup() has fully returned and Bruce's loop body short-circuits on
+    // this board (see src/main.cpp loop() guard).
     reclaim_bb_pins();
     lcd_init();
     show_boot_splash();
+    led_set_rgb(0x00, 0x80, 0xFF);   // cyan = booting / waiting for first loop()
+    // No wd_restore_fspi_routing() here — there's no IDF SD ready to drive
+    // the bus yet; restore happens after wd_mount_sd_idf at first loop().
+}
 
-    led_set_rgb(0x00, 0x80, 0xFF);   // cyan = ready
-    // led_set_rgb already restores FSPI routing internally if the SD card
-    // mounted, but be explicit here to guard against any lcd_*/show_boot_splash
-    // calls that left GPIO 2/6 in plain-output mode without a follow-up LED
-    // call.
+// Called from src/main.cpp loop()'s LILYGO_T_DONGLE_C5 guard on the very
+// first iteration. By this point setup() has fully returned and Bruce's
+// loop body is a 1 s vTaskDelay no-op, so no more main-task SPI traffic
+// will collide with our IDF SD operations.
+extern "C" void wd_post_loop_init() {
+    Serial.println("[wd] post-loop init: mounting SD + starting headless runtime");
+    wd_mount_sd_idf();
     if (wd_sd_mounted) wd_restore_fspi_routing();
-
-    // Spin up softAP, REST handoff, GPS UDP pump, and WiFi-scan wardriver
-    // tasks. From here on the dongle behaves as the headless wardriver.
     wd_boot_headless_runtime();
 }
 
@@ -518,12 +534,9 @@ extern "C" void board_status_led(uint8_t r, uint8_t g, uint8_t b) { led_set_rgb(
 // Shared state across tasks
 static TinyGPSPlus       wd_gps;
 static SemaphoreHandle_t wd_gps_mtx = nullptr;
-// Recursive SD mutex — protects every SD.* and File-derived call. Without
-// this, concurrent ops from the scanner task + REST handlers can corrupt
-// the FAT, manifesting as a card that fails to mount on subsequent boots.
-static SemaphoreHandle_t wd_sd_mtx = nullptr;
-#define WD_SD_LOCK()   if (wd_sd_mtx) xSemaphoreTakeRecursive(wd_sd_mtx, portMAX_DELAY)
-#define WD_SD_UNLOCK() if (wd_sd_mtx) xSemaphoreGiveRecursive(wd_sd_mtx)
+// wd_sd_mtx + WD_SD_LOCK/UNLOCK macros are declared above led_set_rgb so
+// the bit-bang LED can hold them too. Definition lives here would shadow
+// the early declaration — keep the early one only.
 static volatile uint32_t wd_total_aps_seen   = 0;
 static volatile uint32_t wd_total_csv_rows   = 0;
 static volatile uint32_t wd_pending_csv_count = 0;
